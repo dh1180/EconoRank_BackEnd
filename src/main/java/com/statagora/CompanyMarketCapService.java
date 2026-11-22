@@ -18,7 +18,7 @@ class CompanyMarketCapService {
   static final String SOURCE_URL = "https://companiesmarketcap.com/";
   static final String CSV_URL = "https://companiesmarketcap.com/?download=csv";
   static final int REFRESH_INTERVAL_MINUTES = 15;
-  private static final int MAX_COMPANIES = 1000;
+  private static final int MAX_COMPANIES = 15000;
   private static final int MAX_CSV_BYTES = 15_000_000;
   private static final Logger log = LoggerFactory.getLogger(CompanyMarketCapService.class);
 
@@ -135,7 +135,20 @@ class CompanyMarketCapService {
           Map.entry("WA", "GPW Warsaw"),
           Map.entry("TA", "TASE"),
           Map.entry("JO", "JSE"),
-          Map.entry("MX", "BMV"));
+          Map.entry("MX", "BMV"),
+          Map.entry("AE", "UAE (ADX/DFM)"),
+          Map.entry("KW", "Boursa Kuwait"),
+          Map.entry("QA", "QSE Qatar"),
+          Map.entry("IS", "Borsa Istanbul"),
+          Map.entry("KL", "Bursa Malaysia"),
+          Map.entry("VI", "Vienna"),
+          Map.entry("LS", "Euronext Lisbon"),
+          Map.entry("NZ", "NZX"),
+          Map.entry("AT", "Athens"),
+          Map.entry("PS", "PSE Manila"),
+          Map.entry("VN", "HOSE Vietnam"),
+          Map.entry("SN", "Santiago"),
+          Map.entry("BA", "BYMA"));
 
   private final JdbcTemplate db;
   private final boolean refreshEnabled;
