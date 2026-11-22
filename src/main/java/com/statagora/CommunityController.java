@@ -55,16 +55,19 @@ class CommunityController {
   private final RequestLimits limits;
   private final GeoCountryService geo;
   private final PasswordEncoder encoder;
+  private final TranslationService translation;
 
   CommunityController(
       JdbcTemplate db,
       RequestLimits limits,
       GeoCountryService geo,
-      PasswordEncoder encoder) {
+      PasswordEncoder encoder,
+      TranslationService translation) {
     this.db = db;
     this.limits = limits;
     this.geo = geo;
     this.encoder = encoder;
+    this.translation = translation;
   }
 
   record PostInput(
@@ -151,6 +154,55 @@ ORDER BY c.created_at,c.id LIMIT 100
             id,
             viewer(principal));
     return Map.of("post", post, "comments", comments, "commentLimit", 100);
+  }
+
+  @GetMapping("/posts/{id}/translate")
+  Map<String, Object> translatePost(
+      @PathVariable String id,
+      @RequestParam String target,
+      Principal principal,
+      HttpServletRequest request) {
+    if (target == null || !target.matches(LANGUAGE_REGEX)) {
+      throw new ApiErrors.Failure(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "Unsupported target language");
+    }
+    limits.check("translate:" + request.getRemoteAddr(), 30, 60);
+    var post = visiblePost(id, viewer(principal));
+    var res =
+        translation.translate(
+            "post", id, (String) post.get("title"), (String) post.get("body"), target);
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("title", res.title());
+    out.put("body", res.body());
+    out.put("targetLang", res.targetLang());
+    out.put("cached", res.cached());
+    out.put("provider", res.provider());
+    return out;
+  }
+
+  @GetMapping("/comments/{id}/translate")
+  Map<String, Object> translateComment(
+      @PathVariable String id,
+      @RequestParam String target,
+      HttpServletRequest request) {
+    if (target == null || !target.matches(LANGUAGE_REGEX)) {
+      throw new ApiErrors.Failure(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "Unsupported target language");
+    }
+    limits.check("translate:" + request.getRemoteAddr(), 30, 60);
+    var rows =
+        db.queryForList(
+            "SELECT body FROM comment WHERE id=? AND status='VISIBLE'", id);
+    if (rows.isEmpty()) throw ApiErrors.missing();
+    var res =
+        translation.translate(
+            "comment", id, null, (String) rows.get(0).get("body"), target);
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("body", res.body());
+    out.put("targetLang", res.targetLang());
+    out.put("cached", res.cached());
+    out.put("provider", res.provider());
+    return out;
   }
 
   @PostMapping("/posts")

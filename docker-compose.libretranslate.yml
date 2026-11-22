@@ -1,0 +1,17 @@
+services:
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    container_name: statagora-libretranslate
+    ports:
+      - "5000:5000"
+    environment:
+      # 필요 시 언어 추가 가능 (예: ar,it,vi,id,th,tr,hi,uk,nl,pl)
+      LT_LOAD_ONLY: "en,ko,ja,zh,es,fr,de,pt,ru"
+      LT_DISABLE_WEB_UI: "true"
+      LT_THREADS: "4"
+    volumes:
+      - libretranslate_models:/home/libretranslate/.local/share/argos-translate
+    restart: unless-stopped
+
+volumes:
+  libretranslate_models:
