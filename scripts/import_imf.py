@@ -37,16 +37,18 @@ def parse(blob,url):
     for xmlrow in list(rows)[1:]:
         row=row_values(xmlrow)
         get=lambda name:row.get(names[name],'')
-        metric={'NGDPD':'gdp','PPPGDP':'ppp'}.get(get('INDICATOR.ID'))
+        metric={'NGDPD':'gdp','NGDPDPC':'gdppc','PPPGDP':'ppp'}.get(get('INDICATOR.ID'))
         if not metric:continue
-        if get('SCALE')!='Billions':raise ValueError('Unexpected IMF scale')
+        expected_scale='Units' if metric=='gdppc' else 'Billions'
+        if get('SCALE')!=expected_scale:raise ValueError('Unexpected IMF scale: '+get('SCALE'))
+        multiplier=decimal.Decimal(1) if expected_scale=='Units' else decimal.Decimal(1000000000)
         published.add(get('PUBLICATION_DATE'))
         actual_match=re.search(r'(?:19|20)\d{2}',get('LATEST_ACTUAL_ANNUAL_DATA'))
         actual=int(actual_match[0]) if actual_match else 0
         for i,year in header.items():
             if not year.isdigit() or int(year)<2022:continue
             value=row.get(i,'')
-            try: value=decimal.Decimal(value)*decimal.Decimal(1000000000)
+            try: value=decimal.Decimal(value)*multiplier
             except decimal.InvalidOperation:continue
             if not value.is_finite() or value<0:continue
             observations.append(dict(country=get('COUNTRY.ID'),name=get('COUNTRY'),indicator=metric,year=int(year),value=float(value),status='ACTUAL' if int(year)<=actual else 'ESTIMATE_OR_FORECAST'))

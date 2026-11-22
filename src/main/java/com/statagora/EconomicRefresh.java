@@ -61,24 +61,23 @@ class EconomicRefresh implements ApplicationRunner {
       fixedDelayString = "${statagora.refresh.delay-ms:21600000}")
   public synchronized void refresh() {
     if (!enabled) return;
-    for (String provider : List.of("imf", "worldbank")) {
-      String checked = Instant.now().toString();
-      try {
-        var snapshot = provider.equals("imf") ? fetchImf() : fetchWorldBank();
-        boolean changed = store.apply(snapshot);
-        state(
-            provider,
-            checked,
-            "SUCCESS",
-            changed ? "Published a new source revision" : "Source unchanged");
-      } catch (Exception e) {
-        log.warn("Economic refresh failed for {}: {}", provider, e.toString());
-        state(
-            provider,
-            checked,
-            "FAILED",
-            "Upstream unavailable or validation failed; retained last successful data");
-      }
+    String provider = "imf";
+    String checked = Instant.now().toString();
+    try {
+      var snapshot = fetchImf();
+      boolean changed = store.apply(snapshot);
+      state(
+          provider,
+          checked,
+          "SUCCESS",
+          changed ? "Published a new source revision" : "Source unchanged");
+    } catch (Exception e) {
+      log.warn("Economic refresh failed for {}: {}", provider, e.toString());
+      state(
+          provider,
+          checked,
+          "FAILED",
+          "Upstream unavailable or validation failed; retained last successful data");
     }
   }
 

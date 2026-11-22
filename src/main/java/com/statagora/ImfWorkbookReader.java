@@ -74,14 +74,20 @@ class ImfWorkbookReader {
                   return;
                 }
                 String metric =
-                    Map.of("NGDPD", "gdp", "PPPGDP", "ppp").get(cell(row, header, "INDICATOR.ID"));
+                    Map.of("NGDPD", "gdp", "NGDPDPC", "gdppc", "PPPGDP", "ppp")
+                        .get(cell(row, header, "INDICATOR.ID"));
                 if (metric == null) return;
-                if (!cell(row, header, "SCALE").equals("Billions"))
+                String expectedScale = metric.equals("gdppc") ? "Units" : "Billions";
+                if (!cell(row, header, "SCALE").equals(expectedScale))
                   throw new IllegalArgumentException("Unexpected IMF scale");
                 if (!Set.of("US dollar", "Purchasing power parity; international dollar")
                         .contains(cell(row, header, "UNIT"))
-                    && metric.equals("gdp"))
+                    && (metric.equals("gdp") || metric.equals("gdppc")))
                   throw new IllegalArgumentException("Unexpected IMF unit");
+                BigDecimal multiplier =
+                    expectedScale.equals("Units")
+                        ? BigDecimal.ONE
+                        : BigDecimal.valueOf(1000000000L);
                 var actualMatch =
                     java.util.regex.Pattern.compile("(?:19|20)\\d{2}")
                         .matcher(cell(row, header, "LATEST_ACTUAL_ANNUAL_DATA"));
@@ -94,7 +100,7 @@ class ImfWorkbookReader {
                     if (text.isBlank() || text.equals("n/a") || text.equals("--")) continue;
                     BigDecimal amount;
                     try {
-                      amount = new BigDecimal(text).multiply(BigDecimal.valueOf(1000000000L));
+                      amount = new BigDecimal(text).multiply(multiplier);
                     } catch (NumberFormatException e) {
                       continue;
                     }

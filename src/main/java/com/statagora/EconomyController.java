@@ -151,10 +151,10 @@ JOIN dataset_release d ON d.id=o.release_id
   private List<Map<String, Object>> observations(List<String> codes, Integer year, String source) {
     String placeholders = String.join(",", Collections.nCopies(codes.size(), "?"));
     var result = new ArrayList<Map<String, Object>>();
-    for (String metric : List.of("gdp", "ppp", "exports")) {
+    for (String metric : List.of("gdp", "gdppc", "ppp")) {
       var args = new ArrayList<Object>(codes);
       args.add(metric);
-      args.add(provider(metric, metric.equals("exports") ? "worldbank" : source));
+      args.add(provider(metric, source));
       if (year != null) args.add(year);
       result.addAll(
           db.queryForList(
@@ -170,20 +170,8 @@ JOIN dataset_release d ON d.id=o.release_id
   }
 
   private String provider(String indicator, String source) {
-    if (!Set.of("auto", "imf", "worldbank").contains(source)) throw ApiErrors.bad("Unknown source");
-    if (indicator.equals("exports")) {
-      if (source.equals("imf"))
-        throw ApiErrors.bad("IMF WEO does not provide this export level series");
-      return "worldbank";
-    }
-    if (!source.equals("auto")) return source;
-    return db.queryForObject(
-                "SELECT COUNT(*) FROM observation WHERE provider='imf' AND indicator_code=?",
-                Integer.class,
-                indicator)
-            > 0
-        ? "imf"
-        : "worldbank";
+    if (!Set.of("auto", "imf").contains(source)) throw ApiErrors.bad("Unknown source");
+    return "imf";
   }
 
   private int latestYear(String metric, String provider) {
@@ -205,7 +193,7 @@ JOIN dataset_release d ON d.id=o.release_id
   }
 
   private void metric(String code) {
-    if (!Set.of("gdp", "ppp", "exports").contains(code)) throw ApiErrors.bad("Unknown indicator");
+    if (!Set.of("gdp", "gdppc", "ppp").contains(code)) throw ApiErrors.bad("Unknown indicator");
   }
 
   private void year(int year) {

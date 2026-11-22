@@ -62,14 +62,14 @@ class EconomicSnapshotStore {
             snapshot.retrievedAt(),
             snapshot.checksum(),
             canonical);
-    if (!Set.of("imf", "worldbank").contains(snapshot.provider())
+    if (!snapshot.provider().equals("imf")
         || snapshot.observations().size() < 100
         || !snapshot.checksum().matches("[a-f0-9]{64}"))
       throw new IllegalArgumentException("Incomplete economic release");
     Set<String> keys = new HashSet<>();
     for (var v : snapshot.observations()) {
       if (!v.country().matches("[A-Z]{3}")
-          || !Set.of("gdp", "ppp", "exports").contains(v.indicator())
+          || !Set.of("gdp", "gdppc", "ppp").contains(v.indicator())
           || v.year() < 1960
           || v.year() > 2100
           || v.value() == null
@@ -78,10 +78,7 @@ class EconomicSnapshotStore {
           || !keys.add(v.country() + v.indicator() + v.year()))
         throw new IllegalArgumentException("Invalid or duplicated observation");
     }
-    for (String metric :
-        snapshot.provider().equals("imf")
-            ? List.of("gdp", "ppp")
-            : List.of("gdp", "ppp", "exports")) {
+    for (String metric : List.of("gdp", "gdppc", "ppp")) {
       long coverage =
           snapshot.observations().stream()
               .filter(v -> v.indicator().equals(metric))
@@ -91,7 +88,7 @@ class EconomicSnapshotStore {
       if (coverage < 100)
         throw new IllegalArgumentException("Insufficient country coverage for " + metric);
     }
-    String id = snapshot.provider() + "-" + snapshot.checksum().substring(0, 32) + "-v2";
+    String id = snapshot.provider() + "-" + snapshot.checksum().substring(0, 32) + "-v3";
     if (db.queryForObject("SELECT COUNT(*) FROM dataset_release WHERE id=?", Integer.class, id) > 0)
       return false;
     // A failed download/validation never reaches this transaction; all source rows publish

@@ -30,7 +30,7 @@ class ApiIntegrationTest {
   @Autowired EconomicSnapshotStore snapshots;
 
   @Test
-  void latestImfReleaseAndReferenceYearAreSeparateFromWorldBankActuals() throws Exception {
+  void latestImfReleaseServesGdpGdppcAndPppExclusively() throws Exception {
     api.perform(get("/api/rankings?indicator=gdp&size=1"))
         .andExpect(status().isOk())
         .andExpect(
@@ -38,16 +38,17 @@ class ApiIntegrationTest {
         .andExpect(jsonPath("$.provider").value("imf"))
         .andExpect(jsonPath("$.items[0].publishedAt").value("2026-10-13T02:00:00Z"))
         .andExpect(jsonPath("$.items[0].status").value("ESTIMATE_OR_FORECAST"));
-    api.perform(get("/api/rankings?indicator=gdp&source=worldbank&year=2024&size=1"))
+    api.perform(get("/api/rankings?indicator=gdppc&size=1"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.provider").value("worldbank"))
-        .andExpect(jsonPath("$.items[0].status").value("ACTUAL"));
+        .andExpect(jsonPath("$.provider").value("imf"))
+        .andExpect(jsonPath("$.indicator").value("gdppc"))
+        .andExpect(jsonPath("$.items[0].value").isNumber());
     api.perform(get("/api/compare?countries=USA,KOR&year=2026"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.items.length()").value(4));
+        .andExpect(jsonPath("$.items.length()").value(6));
+    api.perform(get("/api/rankings?source=worldbank")).andExpect(status().isBadRequest());
     api.perform(get("/api/rankings?source=invalid")).andExpect(status().isBadRequest());
-    api.perform(get("/api/rankings?indicator=exports&source=imf"))
-        .andExpect(status().isBadRequest());
+    api.perform(get("/api/rankings?indicator=exports")).andExpect(status().isBadRequest());
   }
 
   @Test
@@ -89,8 +90,8 @@ class ApiIntegrationTest {
         .isEqualTo(before);
     assertThat(
             db.queryForObject(
-                "SELECT COUNT(*) FROM observation WHERE provider='worldbank'", Integer.class))
-        .isGreaterThan(1000);
+                "SELECT COUNT(*) FROM observation WHERE provider<>'imf'", Integer.class))
+        .isZero();
   }
 
   String payload(Object body) throws Exception {
@@ -153,7 +154,7 @@ class ApiIntegrationTest {
   @Test
   void rankingsExcludeAggregatesAndUseSameYear() throws Exception {
     var result =
-        api.perform(get("/api/rankings?indicator=gdp&year=2024&size=100&source=worldbank"))
+        api.perform(get("/api/rankings?indicator=gdp&year=2024&size=100&source=imf"))
             .andExpect(status().isOk())
             .andReturn();
     var body = json.readTree(result.getResponse().getContentAsString());
@@ -164,7 +165,7 @@ class ApiIntegrationTest {
       assertThat(row.path("code").asText()).isNotIn("WLD", "HIC", "EUU");
       assertThat(row.path("value").asDouble()).isLessThanOrEqualTo(previous);
       previous = row.path("value").asDouble();
-      assertThat(row.path("sourceUrl").asText()).startsWith("https://data.worldbank.org/");
+      assertThat(row.path("sourceUrl").asText()).startsWith("https://data.imf.org/");
       assertThat(row.path("retrievedAt").asText()).isNotBlank();
     }
   }
