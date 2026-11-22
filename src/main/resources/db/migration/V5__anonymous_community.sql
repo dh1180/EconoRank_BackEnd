@@ -1,0 +1,9 @@
+ALTER TABLE post ALTER COLUMN author_id DROP NOT NULL;
+ALTER TABLE post ADD COLUMN guest_name VARCHAR(40);
+ALTER TABLE post ADD COLUMN guest_country VARCHAR(3);
+ALTER TABLE post ADD COLUMN guest_password_hash VARCHAR(100);
+
+ALTER TABLE comment ALTER COLUMN author_id DROP NOT NULL;
+ALTER TABLE comment ADD COLUMN guest_name VARCHAR(40);
+ALTER TABLE comment ADD COLUMN guest_country VARCHAR(3);
+ALTER TABLE comment ADD COLUMN guest_password_hash VARCHAR(100);

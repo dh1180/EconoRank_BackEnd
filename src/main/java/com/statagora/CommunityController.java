@@ -1,35 +1,93 @@
 package com.statagora;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.security.Principal;
 import java.util.*;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api")
 class CommunityController {
+  private static final String LANGUAGE_REGEX =
+      "en|ko|ja|zh|es|fr|de|pt|ru|ar|hi|bn|id|vi|th|tr|it|nl|pl|uk|sv|no|da|fi|cs|hu|ro|el|he|fa|ms|tl|sw|ur|ta|te|mr|gu|kn|ml|pa|my|km|lo|mn|kk|uz|az|ka|hy|sk|bg|hr|sr|sl|lt|lv|et|is|ga|ca|eu|gl|af|am|ha|yo|zu|so|ne|si|ps|ku|sq|mk|bs|mt|cy";
+
+  private static final Map<String, String> DEFAULT_GUEST_NAMES =
+      Map.ofEntries(
+          Map.entry("KOR", "ㅇㅇ"),
+          Map.entry("JPN", "名無し"),
+          Map.entry("CHN", "匿名"),
+          Map.entry("TWN", "匿名"),
+          Map.entry("HKG", "匿名"),
+          Map.entry("RUS", "Аноним"),
+          Map.entry("UKR", "Анонім"),
+          Map.entry("SAU", "مجهول"),
+          Map.entry("ARE", "مجهول"),
+          Map.entry("EGY", "مجهول"),
+          Map.entry("QAT", "مجهول"),
+          Map.entry("KWT", "مجهول"),
+          Map.entry("DEU", "Anonym"),
+          Map.entry("AUT", "Anonym"),
+          Map.entry("CHE", "Anonym"),
+          Map.entry("FRA", "Anonyme"),
+          Map.entry("BEL", "Anonyme"),
+          Map.entry("ESP", "Anónimo"),
+          Map.entry("MEX", "Anónimo"),
+          Map.entry("ARG", "Anónimo"),
+          Map.entry("COL", "Anónimo"),
+          Map.entry("CHL", "Anónimo"),
+          Map.entry("PER", "Anónimo"),
+          Map.entry("BRA", "Anônimo"),
+          Map.entry("PRT", "Anônimo"),
+          Map.entry("ITA", "Anonimo"),
+          Map.entry("TUR", "Anonim"),
+          Map.entry("VNM", "Ẩn danh"),
+          Map.entry("THA", "นิรนาม"),
+          Map.entry("IND", "अनाम"),
+          Map.entry("IDN", "Anonim"),
+          Map.entry("MYS", "Anonim"));
+
   private final JdbcTemplate db;
   private final RequestLimits limits;
+  private final GeoCountryService geo;
+  private final PasswordEncoder encoder;
 
-  CommunityController(JdbcTemplate db, RequestLimits limits) {
+  CommunityController(
+      JdbcTemplate db,
+      RequestLimits limits,
+      GeoCountryService geo,
+      PasswordEncoder encoder) {
     this.db = db;
     this.limits = limits;
+    this.geo = geo;
+    this.encoder = encoder;
   }
 
   record PostInput(
       @NotBlank @Size(max = 40) String spaceId,
       @NotBlank @Size(max = 160) String title,
       @NotBlank @Size(max = 10000) String body,
-      @Pattern(
-              regexp =
-                  "en|ko|ja|zh|es|fr|de|pt|ru|ar|hi|bn|id|vi|th|tr|it|nl|pl|uk|sv|no|da|fi|cs|hu|ro|el|he|fa|ms|tl|sw|ur|ta|te|mr|gu|kn|ml|pa|my|km|lo|mn|kk|uz|az|ka|hy|sk|bg|hr|sr|sl|lt|lv|et|is|ga|ca|eu|gl|af|am|ha|yo|zu|so|ne|si|ps|ku|sq|mk|bs|mt|cy")
-          @NotNull
-          String language) {}
+      @Pattern(regexp = LANGUAGE_REGEX) @NotNull String language) {}
+
+  record GuestPostInput(
+      @NotBlank @Size(max = 160) String title,
+      @NotBlank @Size(max = 10000) String body,
+      @Pattern(regexp = LANGUAGE_REGEX) @NotNull String language,
+      @Size(max = 40) String guestName,
+      @NotBlank @Size(min = 4, max = 32) String guestPassword) {}
 
   record CommentInput(@NotBlank @Size(max = 3000) String body) {}
+
+  record GuestCommentInput(
+      @NotBlank @Size(max = 3000) String body,
+      @Size(max = 40) String guestName,
+      @NotBlank @Size(min = 4, max = 32) String guestPassword) {}
+
+  record GuestDeleteInput(@NotBlank @Size(min = 4, max = 32) String guestPassword) {}
 
   record ReportInput(
       @Pattern(regexp = "post|comment") @NotNull String targetType,
@@ -50,14 +108,16 @@ class CommunityController {
     String viewer = viewer(principal);
     String targetSpace = "global";
     String condition =
-        " FROM post p JOIN member m ON m.id=p.author_id WHERE p.space_id=? AND p.status='VISIBLE'"
-            + " AND NOT EXISTS (SELECT 1 FROM member_block b WHERE b.blocker_id=? AND"
-            + " b.blocked_id=p.author_id)";
+        " FROM post p LEFT JOIN member m ON m.id=p.author_id WHERE p.space_id=? AND"
+            + " p.status='VISIBLE' AND (p.author_id IS NULL OR NOT EXISTS (SELECT 1 FROM"
+            + " member_block b WHERE b.blocker_id=? AND b.blocked_id=p.author_id))";
     var items =
         db.queryForList(
             "SELECT p.id,p.space_id AS \"spaceId\",p.title,p.body,p.language,p.author_id AS"
-                + " \"authorId\",m.display_name AS \"author\",m.country_code AS"
-                + " \"authorCountry\",p.created_at AS \"createdAt\""
+                + " \"authorId\",COALESCE(m.display_name,p.guest_name) AS"
+                + " \"author\",COALESCE(m.country_code,p.guest_country) AS"
+                + " \"authorCountry\",CASE WHEN p.author_id IS NULL THEN TRUE ELSE FALSE END AS"
+                + " \"anonymous\",p.created_at AS \"createdAt\""
                 + condition
                 + " ORDER BY p.created_at DESC,p.id LIMIT ? OFFSET ?",
             targetSpace,
@@ -81,9 +141,11 @@ class CommunityController {
     var comments =
         db.queryForList(
             """
-SELECT c.id,c.body,c.author_id AS "authorId",m.display_name AS author,m.country_code AS "authorCountry",c.created_at AS "createdAt"
-FROM comment c JOIN member m ON m.id=c.author_id WHERE c.post_id=? AND c.status='VISIBLE'
-AND NOT EXISTS (SELECT 1 FROM member_block b WHERE b.blocker_id=? AND b.blocked_id=c.author_id)
+SELECT c.id,c.body,c.author_id AS "authorId",COALESCE(m.display_name,c.guest_name) AS author,
+COALESCE(m.country_code,c.guest_country) AS "authorCountry",
+CASE WHEN c.author_id IS NULL THEN TRUE ELSE FALSE END AS "anonymous",c.created_at AS "createdAt"
+FROM comment c LEFT JOIN member m ON m.id=c.author_id WHERE c.post_id=? AND c.status='VISIBLE'
+AND (c.author_id IS NULL OR NOT EXISTS (SELECT 1 FROM member_block b WHERE b.blocker_id=? AND b.blocked_id=c.author_id))
 ORDER BY c.created_at,c.id LIMIT 100
 """,
             id,
@@ -108,6 +170,101 @@ ORDER BY c.created_at,c.id LIMIT 100
         input.language());
     event(targetSpace, "POST_CREATED", id);
     return Map.of("id", id);
+  }
+
+  @PostMapping("/guest/posts")
+  @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+  @Transactional
+  Map<String, String> createGuestPost(
+      @Valid @RequestBody GuestPostInput input, HttpServletRequest request) {
+    limits.check("guest-post:" + request.getRemoteAddr(), 5, 60);
+    String countryCode = geo.detectCountryIso3(request);
+    String guestName = resolveGuestName(input.guestName(), countryCode);
+    String id = UUID.randomUUID().toString();
+    db.update(
+        "INSERT INTO"
+            + " post(id,space_id,author_id,title,body,language,guest_name,guest_country,guest_password_hash)"
+            + " VALUES (?, 'global', NULL, ?, ?, ?, ?, ?, ?)",
+        id,
+        input.title().strip(),
+        input.body().strip(),
+        input.language(),
+        guestName,
+        countryCode,
+        encoder.encode(input.guestPassword()));
+    event("global", "POST_CREATED", id);
+    return Map.of("id", id);
+  }
+
+  @PostMapping("/guest/posts/{id}/comments")
+  @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+  @Transactional
+  Map<String, String> createGuestComment(
+      @PathVariable String id,
+      @Valid @RequestBody GuestCommentInput input,
+      HttpServletRequest request) {
+    limits.check("guest-comment:" + request.getRemoteAddr(), 10, 60);
+    var post = visiblePost(id, "");
+    String countryCode = geo.detectCountryIso3(request);
+    String guestName = resolveGuestName(input.guestName(), countryCode);
+    String commentId = UUID.randomUUID().toString();
+    db.update(
+        "INSERT INTO"
+            + " comment(id,post_id,author_id,body,guest_name,guest_country,guest_password_hash)"
+            + " VALUES (?, ?, NULL, ?, ?, ?, ?)",
+        commentId,
+        id,
+        input.body().strip(),
+        guestName,
+        countryCode,
+        encoder.encode(input.guestPassword()));
+    event((String) post.get("spaceId"), "COMMENT_CREATED", commentId);
+    return Map.of("id", commentId);
+  }
+
+  @PostMapping("/guest/posts/{id}/delete")
+  @Transactional
+  Map<String, Boolean> deleteGuestPost(
+      @PathVariable String id,
+      @Valid @RequestBody GuestDeleteInput input,
+      HttpServletRequest request) {
+    limits.check("guest-del:" + request.getRemoteAddr(), 15, 60);
+    return deleteGuest("post", id, input.guestPassword());
+  }
+
+  @PostMapping("/guest/comments/{id}/delete")
+  @Transactional
+  Map<String, Boolean> deleteGuestComment(
+      @PathVariable String id,
+      @Valid @RequestBody GuestDeleteInput input,
+      HttpServletRequest request) {
+    limits.check("guest-del:" + request.getRemoteAddr(), 15, 60);
+    return deleteGuest("comment", id, input.guestPassword());
+  }
+
+  private Map<String, Boolean> deleteGuest(String table, String id, String password) {
+    var rows =
+        db.queryForList(
+            "SELECT guest_password_hash FROM "
+                + table
+                + " WHERE id=? AND author_id IS NULL AND status='VISIBLE'",
+            id);
+    if (rows.isEmpty()) throw ApiErrors.missing();
+    String hash = (String) rows.get(0).get("guest_password_hash");
+    if (hash == null || !encoder.matches(password, hash)) {
+      throw new ApiErrors.Failure(
+          org.springframework.http.HttpStatus.FORBIDDEN, "Invalid guest password");
+    }
+    db.update("UPDATE " + table + " SET status='DELETED' WHERE id=?", id);
+    return Map.of("ok", true);
+  }
+
+  private static String resolveGuestName(String provided, String countryCode) {
+    if (provided != null && !provided.isBlank()) return provided.strip();
+    if (countryCode != null) {
+      return DEFAULT_GUEST_NAMES.getOrDefault(countryCode.toUpperCase(Locale.ROOT), "Anon");
+    }
+    return "Anon";
   }
 
   @PostMapping("/posts/{id}/comments")
@@ -253,9 +410,11 @@ ORDER BY r.created_at DESC LIMIT 50 OFFSET ?
     var rows =
         db.queryForList(
             """
-SELECT p.id,p.title,p.body,p.language,p.space_id AS "spaceId",p.author_id AS "authorId",m.display_name AS author,m.country_code AS "authorCountry",p.created_at AS "createdAt"
-FROM post p JOIN member m ON m.id=p.author_id WHERE p.id=? AND p.status='VISIBLE'
-AND NOT EXISTS (SELECT 1 FROM member_block b WHERE b.blocker_id=? AND b.blocked_id=p.author_id)
+SELECT p.id,p.title,p.body,p.language,p.space_id AS "spaceId",p.author_id AS "authorId",
+COALESCE(m.display_name,p.guest_name) AS author,COALESCE(m.country_code,p.guest_country) AS "authorCountry",
+CASE WHEN p.author_id IS NULL THEN TRUE ELSE FALSE END AS "anonymous",p.created_at AS "createdAt"
+FROM post p LEFT JOIN member m ON m.id=p.author_id WHERE p.id=? AND p.status='VISIBLE'
+AND (p.author_id IS NULL OR NOT EXISTS (SELECT 1 FROM member_block b WHERE b.blocker_id=? AND b.blocked_id=p.author_id))
 """,
             id,
             viewer);

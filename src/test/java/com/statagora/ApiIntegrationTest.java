@@ -361,4 +361,48 @@ class ApiIntegrationTest {
                 .content(payload(Map.of("email", email, "password", "incorrect"))))
         .andExpect(status().isUnauthorized());
   }
+
+  @Test
+  void anonymousPostsUseCountryDefaultNameAndPasswordDeletion() throws Exception {
+    var created =
+        api.perform(
+                post("/api/guest/posts")
+                    .with(csrf())
+                    .header("CF-IPCountry", "KR")
+                    .contentType("application/json")
+                    .content(
+                        payload(
+                            Map.of(
+                                "title",
+                                "Anonymous GDP take",
+                                "body",
+                                "Hello from Korea",
+                                "language",
+                                "ko",
+                                "guestName",
+                                "",
+                                "guestPassword",
+                                "1234"))))
+            .andExpect(status().isCreated())
+            .andReturn();
+    String id = json.readTree(created.getResponse().getContentAsString()).path("id").asText();
+    api.perform(get("/api/posts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.post.author").value("ㅇㅇ"))
+        .andExpect(jsonPath("$.post.authorCountry").value("KOR"))
+        .andExpect(jsonPath("$.post.anonymous").value(true));
+    api.perform(
+            post("/api/guest/posts/" + id + "/delete")
+                .with(csrf())
+                .contentType("application/json")
+                .content("{\"guestPassword\":\"9999\"}"))
+        .andExpect(status().isForbidden());
+    api.perform(
+            post("/api/guest/posts/" + id + "/delete")
+                .with(csrf())
+                .contentType("application/json")
+                .content("{\"guestPassword\":\"1234\"}"))
+        .andExpect(status().isOk());
+    api.perform(get("/api/posts/" + id)).andExpect(status().isNotFound());
+  }
 }

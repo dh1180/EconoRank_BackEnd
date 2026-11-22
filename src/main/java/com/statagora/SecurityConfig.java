@@ -39,7 +39,7 @@ class SecurityConfig {
                     .hasRole("ADMIN")
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/**")
                     .permitAll()
-                    .requestMatchers("/api/auth/register", "/api/auth/login")
+                    .requestMatchers("/api/auth/register", "/api/auth/login", "/api/guest/**")
                     .permitAll()
                     .anyRequest()
                     .authenticated())
