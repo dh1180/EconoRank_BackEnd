@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: statagora
+      POSTGRES_USER: statagora
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U statagora -d statagora"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  backend:
+    build: .
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/statagora
+      DATABASE_USERNAME: statagora
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+  frontend:
+    build:
+      context: ../StatAgora_FrontEnd
+      args:
+        API_BASE_URL: http://backend:8080
+        SITE_URL: ${SITE_URL:-http://localhost:3000}
+    environment:
+      API_BASE_URL: http://backend:8080
+      SITE_URL: ${SITE_URL:-http://localhost:3000}
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3000:3000"
+volumes:
+  postgres-data:
