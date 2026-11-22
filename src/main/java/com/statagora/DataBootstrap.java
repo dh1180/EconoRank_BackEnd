@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
+@org.springframework.core.annotation.Order(0)
 class DataBootstrap implements ApplicationRunner {
   private final JdbcTemplate db;
   private final ObjectMapper json;
@@ -54,13 +55,18 @@ class DataBootstrap implements ApplicationRunner {
       if (db.queryForObject(
               "SELECT COUNT(*) FROM dataset_release WHERE id=?", Integer.class, release)
           > 0) return;
-      db.update("INSERT INTO dataset_release VALUES (?,?,?)", release, release, "World Bank WDI");
+      db.update(
+          "INSERT INTO dataset_release(id,retrieved_at,source) VALUES (?,?,?)",
+          release,
+          release,
+          "World Bank WDI");
       Set<String> partitions = new HashSet<>();
       for (var row : rows) {
         String key = row.path("indicator").asText() + ":" + row.path("year").asInt();
         if (partitions.add(key))
           db.update(
-              "DELETE FROM observation WHERE indicator_code=? AND reference_year=?",
+              "DELETE FROM observation WHERE provider='worldbank' AND indicator_code=? AND"
+                  + " reference_year=?",
               row.path("indicator").asText(),
               row.path("year").asInt());
       }
@@ -85,7 +91,8 @@ class DataBootstrap implements ApplicationRunner {
             row.path("region").asText(),
             country);
         db.update(
-            "INSERT INTO observation VALUES (?,?,?,?,?)",
+            "INSERT INTO observation(country_code,indicator_code,reference_year,amount,release_id)"
+                + " VALUES (?,?,?,?,?)",
             country,
             row.path("indicator").asText(),
             row.path("year").asInt(),

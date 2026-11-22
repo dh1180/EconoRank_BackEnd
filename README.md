@@ -11,7 +11,7 @@ Java 17+ is required; Maven is downloaded by the checked-in wrapper.
 # Windows: .\mvnw.cmd spring-boot:run
 ```
 
-The API runs at `http://localhost:8080/api`. Default development storage is a persistent H2 file under ignored `data/`. The database is migrated with Flyway and loads the bundled genuine World Bank snapshot once per release. No account, credential, or fabricated discussion is seeded.
+The API runs at `http://localhost:8080/api`. Default development storage is a persistent H2 file under ignored `data/`. The database is migrated with Flyway and loads bundled World Bank and IMF WEO releases, then checks upstream sources every six hours. No account, credential, or fabricated discussion is seeded.
 
 Start the sibling Next.js checkout with `npm ci && npm run dev`, then open `http://localhost:3000/en` or `/ko`. Browser requests use the frontend's same-origin `/api` proxy; cookies and CSRF work without cross-origin credentials or local storage tokens.
 
@@ -38,7 +38,7 @@ The committed snapshot contains 1,732 non-null observations for 2022–2024, fet
 | `ppp` | `NY.GDP.MKTP.PP.CD` | Current international dollars |
 | `exports` | `NE.EXP.GNFS.CD` | Current US dollars, **goods and services** |
 
-Ranks use SQL `RANK()` descending, with country code for deterministic tie ordering. Every row includes reference year, source URL, and retrieval time. Missing values remain absent; countries with no value for a requested metric/year are not ranked. Comparisons do not substitute another year. This is a reviewed historical snapshot, not a live quote or IMF forecast.
+Ranks use SQL `RANK()` descending, with country code for deterministic tie ordering. Every row includes reference year, source URL, and retrieval time. Missing values remain absent; countries with no value for a requested metric/year are not ranked. Comparisons do not substitute another year. World Bank observations are historical actuals. IMF WEO GDP/PPP include historical observations and estimates/forecasts, explicitly labeled per country/year using the source's latest-actual metadata. No monthly or quarterly figure is presented as annual GDP.
 
 ### Refresh from the real upstream API
 
@@ -47,7 +47,7 @@ python scripts/import_world_bank.py --from-year 2022 --to-year 2024
 ./mvnw verify
 ```
 
-Python 3 standard library only. The importer validates responses and coverage, retries upstream failures, filters aggregates and null values, and atomically replaces the JSONL file only after all three series succeed. Review the data diff, commit it, rebuild, and restart. Startup imports a new retrieval release transactionally, replacing its metric/year partitions (including removed observations); the same release is skipped on subsequent starts. Existing members/discussions are preserved. Failed import rolls back. Do not start multiple instances while running a data migration. For future automated ingestion, move the reviewed-release workflow into a scheduled worker with locking and publication approval. See [World Bank API documentation](https://datahelpdesk.worldbank.org/knowledgebase/articles/898581-api-basic-call-structures) and [data terms](https://www.worldbank.org/en/about/legal/terms-of-use-for-datasets).
+Python 3 standard library only. The importer validates responses and coverage, retries upstream failures, filters aggregates and null values, and atomically replaces the JSONL file only after all three series succeed. Review the data diff, commit it, rebuild, and restart. Startup imports a new retrieval release transactionally, replacing its metric/year partitions (including removed observations); the same release is skipped on subsequent starts. Existing members/discussions are preserved. Failed import rolls back. Do not start multiple instances while running a data migration. The running server also updates data automatically as described below. See [World Bank API documentation](https://datahelpdesk.worldbank.org/knowledgebase/articles/898581-api-basic-call-structures) and [data terms](https://www.worldbank.org/en/about/legal/terms-of-use-for-datasets).
 
 ## API contract
 
@@ -102,3 +102,29 @@ Integration coverage includes provenance and aggregate exclusion, ordering, inva
 Sessions and bounded request throttles are in memory: run a single backend instance for this MVP. Behind the Next.js proxy, IP throttles can be shared by users of that proxy; configure a trusted gateway/shared Redis limiter before public growth. A restart signs users out. Posts, comments, members and reports remain in the database. Authenticated posts: 5/minute; comments and reports: 10/minute; login: 10/minute per observed peer; registration: 5/hour per peer.
 
 Email verification, password recovery, member suspensions, automated spam classification, report dismissal/restoration, more than 100 replies per thread, live chat, automatic translation, company data, and advertising are subsequent work. Establish actual moderation coverage and account recovery before an unrestricted public launch. HTTPS and `COOKIE_SECURE=true` are required for deployment; no hosting deployment is included in this PR.
+
+## Latest releases and automatic refresh
+
+GDP and PPP now default to the latest **IMF WEO** release and the most recent available reference year **no later than the current UTC year**, rather than hard-coded 2024 or the furthest forecast year. The bundled official October 2026 workbook was published **2026-10-13** and supplies **3,834** country-year GDP/PPP observations (2022–2031). Values in source billions are converted to dollars/international dollars by multiplying by 1,000,000,000. Only the `Countries` sheet is parsed; country-group aggregates are excluded. The source's `LATEST_ACTUAL_ANNUAL_DATA` distinguishes actuals from estimates/forecasts. For fiscal labels such as `FY2024/25`, the first year is used conservatively as the actual boundary.
+
+* `source=auto` (default): IMF for GDP/PPP, World Bank for exports.
+* `source=imf`: IMF GDP/PPP; export rankings reject this combination because this workbook does not contain that export-level series.
+* `source=worldbank`: historical WDI actuals.
+* `/years?indicator=gdp&source=imf`: source-specific years, including explicitly selectable future projections.
+* `/rankings` and `/compare` accept an optional `year`; omitting it selects the latest available year up to the current year. A comparison does **not** substitute an older export year when exports are missing.
+* Returned rows add `provider`, `source`, `publishedAt`, `edition`, and `status` (`ACTUAL` or `ESTIMATE_OR_FORECAST`). Source rows coexist using a composite primary key; WDI and IMF never overwrite each other.
+* `/data/status` exposes last check/success, refresh outcome, and active release provenance.
+
+While the backend is running, its scheduled worker checks the official IMF dataset page for the latest April/October workbook link and fetches the current workbook. It also rechecks the World Bank API for 2022 through the current year. Defaults: first check 30 seconds after startup, then every **6 hours**. Workbook checksum detects same-release revisions. All rows are validated before atomic publication; source failure or incomplete data preserves the last successful release. Scheduled refresh never modifies members/posts. Schedule and failure messages are logged; no public mutation endpoint is exposed. An unchanged checksum is not imported again. Keep one backend instance until distributed locking is introduced.
+
+Configuration (Spring properties, command-line or environment relaxed binding):
+
+```text
+statagora.refresh.enabled=true
+statagora.refresh.initial-delay-ms=30000
+statagora.refresh.delay-ms=21600000
+```
+
+The source is [IMF WEO](https://data.imf.org/en/datasets/IMF.RES:WEO), not Namu Wiki. IMF April/October is a **publication vintage**, not “GDP through October.” The annual 2026 value remains an estimate/forecast until sufficient actual information is available. Refer to [IMF WEO FAQ](https://data.imf.org/Datasets/WEO/Frequently-Asked-Questions) and IMF statistical-data terms. `python scripts/import_imf.py` refreshes the bundled cold-start snapshot; no Python installation is needed for server-side scheduled updates. The Java parser streams the country worksheet and disables XML external entities/DTDs.
+
+Revision validation: 11 integration tests plus one workbook-parser test (12 total); H2 and PostgreSQL migration/queries, actual/forecast labels, source separation, missing current-year exports, malformed-source rejection and retained last-good data are covered. The existing community/authentication checks remain enabled. Tests disable outbound scheduled work for repeatability.
