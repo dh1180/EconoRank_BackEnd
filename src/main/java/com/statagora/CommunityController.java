@@ -48,7 +48,7 @@ class CommunityController {
       Principal principal) {
     EconomyController.pagination(page, size);
     String viewer = viewer(principal);
-    space(space);
+    String targetSpace = "global";
     String condition =
         " FROM post p JOIN member m ON m.id=p.author_id WHERE p.space_id=? AND p.status='VISIBLE'"
             + " AND NOT EXISTS (SELECT 1 FROM member_block b WHERE b.blocker_id=? AND"
@@ -56,10 +56,11 @@ class CommunityController {
     var items =
         db.queryForList(
             "SELECT p.id,p.space_id AS \"spaceId\",p.title,p.body,p.language,p.author_id AS"
-                + " \"authorId\",m.display_name AS \"author\",p.created_at AS \"createdAt\""
+                + " \"authorId\",m.display_name AS \"author\",m.country_code AS"
+                + " \"authorCountry\",p.created_at AS \"createdAt\""
                 + condition
                 + " ORDER BY p.created_at DESC,p.id LIMIT ? OFFSET ?",
-            space,
+            targetSpace,
             viewer,
             size,
             page * size);
@@ -71,7 +72,7 @@ class CommunityController {
         "size",
         size,
         "total",
-        db.queryForObject("SELECT COUNT(*)" + condition, Integer.class, space, viewer));
+        db.queryForObject("SELECT COUNT(*)" + condition, Integer.class, targetSpace, viewer));
   }
 
   @GetMapping("/posts/{id}")
@@ -80,7 +81,7 @@ class CommunityController {
     var comments =
         db.queryForList(
             """
-SELECT c.id,c.body,c.author_id AS "authorId",m.display_name AS author,c.created_at AS "createdAt"
+SELECT c.id,c.body,c.author_id AS "authorId",m.display_name AS author,m.country_code AS "authorCountry",c.created_at AS "createdAt"
 FROM comment c JOIN member m ON m.id=c.author_id WHERE c.post_id=? AND c.status='VISIBLE'
 AND NOT EXISTS (SELECT 1 FROM member_block b WHERE b.blocker_id=? AND b.blocked_id=c.author_id)
 ORDER BY c.created_at,c.id LIMIT 100
@@ -95,17 +96,17 @@ ORDER BY c.created_at,c.id LIMIT 100
   @Transactional
   Map<String, String> create(@Valid @RequestBody PostInput input, Principal principal) {
     limits.check("post:" + principal.getName(), 5, 60);
-    space(input.spaceId());
+    String targetSpace = "global";
     String id = UUID.randomUUID().toString();
     db.update(
         "INSERT INTO post(id,space_id,author_id,title,body,language) VALUES (?,?,?,?,?,?)",
         id,
-        input.spaceId(),
+        targetSpace,
         principal.getName(),
         input.title().strip(),
         input.body().strip(),
         input.language());
-    event(input.spaceId(), "POST_CREATED", id);
+    event(targetSpace, "POST_CREATED", id);
     return Map.of("id", id);
   }
 
@@ -252,7 +253,7 @@ ORDER BY r.created_at DESC LIMIT 50 OFFSET ?
     var rows =
         db.queryForList(
             """
-SELECT p.id,p.title,p.body,p.language,p.space_id AS "spaceId",p.author_id AS "authorId",m.display_name AS author,p.created_at AS "createdAt"
+SELECT p.id,p.title,p.body,p.language,p.space_id AS "spaceId",p.author_id AS "authorId",m.display_name AS author,m.country_code AS "authorCountry",p.created_at AS "createdAt"
 FROM post p JOIN member m ON m.id=p.author_id WHERE p.id=? AND p.status='VISIBLE'
 AND NOT EXISTS (SELECT 1 FROM member_block b WHERE b.blocker_id=? AND b.blocked_id=p.author_id)
 """,

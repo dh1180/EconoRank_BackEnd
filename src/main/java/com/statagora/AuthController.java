@@ -22,6 +22,7 @@ class AuthController {
   private final HttpSessionSecurityContextRepository contexts;
   private final HttpSessionCsrfTokenRepository csrf;
   private final RequestLimits limits;
+  private final GeoCountryService geo;
   private final String dummyHash;
 
   AuthController(
@@ -29,12 +30,14 @@ class AuthController {
       PasswordEncoder encoder,
       HttpSessionSecurityContextRepository contexts,
       HttpSessionCsrfTokenRepository csrf,
-      RequestLimits limits) {
+      RequestLimits limits,
+      GeoCountryService geo) {
     this.db = db;
     this.encoder = encoder;
     this.contexts = contexts;
     this.csrf = csrf;
     this.limits = limits;
+    this.geo = geo;
     dummyHash = encoder.encode("timing-equalization-only");
   }
 
@@ -61,14 +64,16 @@ class AuthController {
     if (body.password().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72)
       throw ApiErrors.bad("Password must be at most 72 UTF-8 bytes");
     String id = UUID.randomUUID().toString();
+    String countryCode = geo.detectCountryIso3(request);
     // Administrator promotion is an explicit database operation, never granted through public
     // registration.
     db.update(
-        "INSERT INTO member(id,email,display_name,password_hash) VALUES (?,?,?,?)",
+        "INSERT INTO member(id,email,display_name,password_hash,country_code) VALUES (?,?,?,?,?)",
         id,
         body.email().toLowerCase(Locale.ROOT),
         body.displayName().strip(),
-        encoder.encode(body.password()));
+        encoder.encode(body.password()),
+        countryCode);
     signIn(id, "USER", request, response);
     return member(id);
   }
@@ -86,6 +91,10 @@ class AuthController {
           org.springframework.http.HttpStatus.UNAUTHORIZED, "Invalid email or password");
     var row = rows.get(0);
     String id = (String) row.get("id");
+    String countryCode = geo.detectCountryIso3(request);
+    if (countryCode != null) {
+      db.update("UPDATE member SET country_code=? WHERE id=?", countryCode, id);
+    }
     signIn(id, (String) row.get("role"), request, response);
     return member(id);
   }
@@ -105,7 +114,9 @@ class AuthController {
 
   Map<String, Object> member(String id) {
     return db.queryForMap(
-        "SELECT id, display_name AS \"displayName\", role FROM member WHERE id=?", id);
+        "SELECT id, display_name AS \"displayName\", role, country_code AS \"countryCode\" FROM"
+            + " member WHERE id=?",
+        id);
   }
 
   @GetMapping("/me")
