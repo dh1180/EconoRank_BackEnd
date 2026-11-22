@@ -9,9 +9,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api")
 class EconomyController {
   private final JdbcTemplate db;
+  private final GeoCountryService geo;
 
-  EconomyController(JdbcTemplate db) {
+  EconomyController(JdbcTemplate db, GeoCountryService geo) {
     this.db = db;
+    this.geo = geo;
   }
 
   private static final String SELECT =
@@ -28,6 +30,14 @@ JOIN dataset_release d ON d.id=o.release_id
   Map<String, String> health() {
     db.queryForObject("SELECT 1", Integer.class);
     return Map.of("status", "ok");
+  }
+
+  @GetMapping("/geo")
+  Map<String, Object> geo(jakarta.servlet.http.HttpServletRequest request) {
+    String countryCode = geo.detectCountryIso3(request);
+    Map<String, Object> res = new LinkedHashMap<>();
+    res.put("countryCode", countryCode);
+    return res;
   }
 
   @GetMapping("/indicators")
