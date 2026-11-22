@@ -91,10 +91,6 @@ class AuthController {
           org.springframework.http.HttpStatus.UNAUTHORIZED, "Invalid email or password");
     var row = rows.get(0);
     String id = (String) row.get("id");
-    String countryCode = geo.detectCountryIso3(request);
-    if (countryCode != null) {
-      db.update("UPDATE member SET country_code=? WHERE id=?", countryCode, id);
-    }
     signIn(id, (String) row.get("role"), request, response);
     return member(id);
   }
