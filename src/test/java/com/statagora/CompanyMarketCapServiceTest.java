@@ -24,11 +24,14 @@ class CompanyMarketCapServiceTest {
     assertThat(items.get(0).symbol()).isEqualTo("AAPL");
     assertThat(items.get(0).countryCode()).isEqualTo("USA");
     assertThat(items.get(0).exchange()).isEqualTo("US (NYSE/NASDAQ)");
+    assertThat(items.get(0).region()).isEqualTo("NORTH_AMERICA");
     assertThat(items.get(1).name()).isEqualTo("Alphabet, Inc. (Google)");
     assertThat(items.get(2).countryCode()).isEqualTo("KOR");
     assertThat(items.get(2).exchange()).isEqualTo("KRX");
+    assertThat(items.get(2).region()).isEqualTo("ASIA");
     assertThat(items.get(2).priceUsd()).isEqualByComparingTo("62.10");
     assertThat(CompanyMarketCapService.resolveExchange("7203.T")).isEqualTo("TSE");
     assertThat(CompanyMarketCapService.resolveExchange("BRK.B")).isEqualTo("US (NYSE/NASDAQ)");
+    assertThat(CompanyMarketCapService.resolveRegion("DEU", "XETRA")).isEqualTo("EUROPE");
   }
 }

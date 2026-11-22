@@ -30,7 +30,8 @@ class CompanyMarketCapService {
       BigDecimal priceUsd,
       String country,
       String countryCode,
-      String exchange) {}
+      String exchange,
+      String region) {}
 
   record Snapshot(List<Company> items, Instant updatedAt) {}
 
@@ -221,6 +222,43 @@ class CompanyMarketCapService {
     return next;
   }
 
+  private static final Set<String> NORTH_AMERICA = Set.of("USA", "CAN", "MEX", "BMU", "CYM");
+  private static final Set<String> EUROPE =
+      Set.of(
+          "GBR", "DEU", "FRA", "CHE", "NLD", "IRL", "DNK", "ESP", "ITA", "SWE", "BEL", "NOR", "FIN",
+          "AUT", "POL", "LUX", "CZE", "PRT", "GRC", "HUN", "RUS", "TUR", "UKR", "ROU", "ISL", "CYP",
+          "MLT", "HRV", "BGR", "SVK", "SVN", "LTU", "LVA", "EST", "SRB", "JEY", "GGY", "IMN");
+  private static final Set<String> ASIA =
+      Set.of(
+          "CHN", "JPN", "KOR", "TWN", "IND", "HKG", "SGP", "IDN", "THA", "MYS", "VNM", "PHL", "KAZ",
+          "PAK", "BGD", "LKA", "MAC", "MNG");
+  private static final Set<String> MIDDLE_EAST =
+      Set.of("SAU", "ARE", "ISR", "QAT", "KWT", "OMN", "BHR", "JOR", "EGY");
+  private static final Set<String> OCEANIA = Set.of("AUS", "NZL");
+  private static final Set<String> LATIN_AMERICA =
+      Set.of("BRA", "ARG", "CHL", "COL", "PER", "URY", "PAN", "CRI");
+  private static final Set<String> AFRICA = Set.of("ZAF", "NGA", "MAR", "KEN", "GHA", "MUS");
+
+  static String resolveRegion(String countryCode, String exchange) {
+    if (countryCode != null && !countryCode.isBlank()) {
+      String c = countryCode.toUpperCase(Locale.ROOT);
+      if (NORTH_AMERICA.contains(c)) return "NORTH_AMERICA";
+      if (EUROPE.contains(c)) return "EUROPE";
+      if (ASIA.contains(c)) return "ASIA";
+      if (MIDDLE_EAST.contains(c)) return "MIDDLE_EAST";
+      if (OCEANIA.contains(c)) return "OCEANIA";
+      if (LATIN_AMERICA.contains(c)) return "LATIN_AMERICA";
+      if (AFRICA.contains(c)) return "AFRICA";
+    }
+    if ("US (NYSE/NASDAQ)".equals(exchange) || "TSX".equals(exchange) || "BMV".equals(exchange))
+      return "NORTH_AMERICA";
+    if (Set.of("KRX", "TSE", "HKEX", "SSE", "SZSE", "TWSE", "NSE India", "SGX", "IDX", "SET")
+        .contains(exchange)) return "ASIA";
+    if (Set.of("LSE", "XETRA", "Euronext Paris", "SIX Swiss", "Borsa Italiana", "BME Madrid")
+        .contains(exchange)) return "EUROPE";
+    return "OTHER";
+  }
+
   static String resolveExchange(String symbol) {
     if (symbol == null || symbol.isBlank()) return "Other";
     int dot = symbol.lastIndexOf('.');
@@ -273,6 +311,7 @@ class CompanyMarketCapService {
       if (marketCap.signum() <= 0) continue;
       rankCounter++;
       String code = countryLookup.getOrDefault(country.toLowerCase(Locale.ROOT), "");
+      String exchange = resolveExchange(symbol);
       result.add(
           new Company(
               rankCounter,
@@ -282,7 +321,8 @@ class CompanyMarketCapService {
               priceUsd,
               country,
               code,
-              resolveExchange(symbol)));
+              exchange,
+              resolveRegion(code, exchange)));
     }
     return List.copyOf(result);
   }
