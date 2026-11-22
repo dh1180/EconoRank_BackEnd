@@ -180,6 +180,10 @@ ORDER BY c.created_at,c.id LIMIT 100
     limits.check("guest-post:" + request.getRemoteAddr(), 5, 60);
     String countryCode = geo.detectCountryIso3(request);
     String guestName = resolveGuestName(input.guestName(), countryCode);
+    String postLang =
+        countryCode != null
+            ? GeoCountryService.countryToLanguage(countryCode)
+            : input.language();
     String id = UUID.randomUUID().toString();
     db.update(
         "INSERT INTO"
@@ -188,7 +192,7 @@ ORDER BY c.created_at,c.id LIMIT 100
         id,
         input.title().strip(),
         input.body().strip(),
-        input.language(),
+        postLang,
         guestName,
         countryCode,
         encoder.encode(input.guestPassword()));

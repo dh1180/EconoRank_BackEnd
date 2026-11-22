@@ -72,6 +72,38 @@ class GeoCountryService {
     return null;
   }
 
+  static String countryToLanguage(String iso3) {
+    if (iso3 == null || iso3.isBlank()) return null;
+    return switch (iso3.trim().toUpperCase(Locale.ROOT)) {
+      case "KOR" -> "ko";
+      case "JPN" -> "ja";
+      case "CHN", "TWN", "HKG", "MAC" -> "zh";
+      case "ESP", "MEX", "ARG", "COL", "CHL", "PER", "VEN", "ECU", "GTM", "CUB", "DOM", "URY", "PRY", "BOL" -> "es";
+      case "FRA", "MCO" -> "fr";
+      case "DEU", "AUT", "LIE" -> "de";
+      case "BRA", "PRT", "AGO", "MOZ" -> "pt";
+      case "RUS", "BLR" -> "ru";
+      case "UKR" -> "uk";
+      case "SAU", "ARE", "EGY", "QAT", "KWT", "IRQ", "JOR", "LBN", "OMN", "BHR", "MAR", "DZA", "TUN" -> "ar";
+      case "IND" -> "hi";
+      case "IDN" -> "id";
+      case "VNM" -> "vi";
+      case "THA" -> "th";
+      case "TUR" -> "tr";
+      case "ITA", "SMR" -> "it";
+      case "NLD" -> "nl";
+      case "POL" -> "pl";
+      case "SWE" -> "sv";
+      case "MYS" -> "ms";
+      case "PHL" -> "tl";
+      case "ISR" -> "he";
+      case "IRN" -> "fa";
+      case "PAK" -> "ur";
+      case "BGD" -> "bn";
+      default -> "en";
+    };
+  }
+
   static String toIso3(String iso2) {
     if (iso2 == null) return null;
     String upper = iso2.trim().toUpperCase(Locale.ROOT);
