@@ -23,7 +23,11 @@ class CommunityController {
       @NotBlank @Size(max = 40) String spaceId,
       @NotBlank @Size(max = 160) String title,
       @NotBlank @Size(max = 10000) String body,
-      @Pattern(regexp = "en|ko") @NotNull String language) {}
+      @Pattern(
+              regexp =
+                  "en|ko|ja|zh|es|fr|de|pt|ru|ar|hi|bn|id|vi|th|tr|it|nl|pl|uk|sv|no|da|fi|cs|hu|ro|el|he|fa|ms|tl|sw|ur|ta|te|mr|gu|kn|ml|pa|my|km|lo|mn|kk|uz|az|ka|hy|sk|bg|hr|sr|sl|lt|lv|et|is|ga|ca|eu|gl|af|am|ha|yo|zu|so|ne|si|ps|ku|sq|mk|bs|mt|cy")
+          @NotNull
+          String language) {}
 
   record CommentInput(@NotBlank @Size(max = 3000) String body) {}
 
