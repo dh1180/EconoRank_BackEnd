@@ -58,7 +58,7 @@ class EconomicRefresh implements ApplicationRunner {
 
   @Scheduled(
       initialDelayString = "${statagora.refresh.initial-delay-ms:30000}",
-      fixedDelayString = "${statagora.refresh.delay-ms:21600000}")
+      fixedDelayString = "${statagora.refresh.delay-ms:86400000}")
   public synchronized void refresh() {
     if (!enabled) return;
     String provider = "imf";

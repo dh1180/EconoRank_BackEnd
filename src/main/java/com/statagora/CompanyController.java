@@ -15,14 +15,22 @@ class CompanyController {
   }
 
   @GetMapping("/companies")
-  Map<String, Object> companies(@RequestParam(defaultValue = "200") int limit) {
-    if (limit < 1 || limit > 500) throw ApiErrors.bad("limit 1–500");
+  Map<String, Object> companies(
+      @RequestParam(defaultValue = "500") int limit,
+      @RequestParam(required = false) String exchange) {
+    if (limit < 1 || limit > 1000) throw ApiErrors.bad("limit 1–1000");
     var snapshot = service.current();
     if (snapshot == null || snapshot.items().isEmpty()) {
       throw new ResponseStatusException(
           HttpStatus.SERVICE_UNAVAILABLE, "Live company market cap data is temporarily unavailable");
     }
-    var items = snapshot.items().subList(0, Math.min(limit, snapshot.items().size()));
+    var filtered =
+        (exchange == null || exchange.isBlank() || exchange.equalsIgnoreCase("ALL"))
+            ? snapshot.items()
+            : snapshot.items().stream()
+                .filter(c -> c.exchange().equalsIgnoreCase(exchange.trim()))
+                .toList();
+    var items = filtered.subList(0, Math.min(limit, filtered.size()));
     return Map.of(
         "items",
         items,

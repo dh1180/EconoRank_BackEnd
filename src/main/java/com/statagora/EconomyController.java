@@ -136,7 +136,7 @@ JOIN dataset_release d ON d.id=o.release_id
   Map<String, Object> status() {
     return Map.of(
         "refreshIntervalHours",
-        6,
+        24,
         "sources",
         db.queryForList(
             "SELECT provider,checked_at AS \"checkedAt\",succeeded_at AS"

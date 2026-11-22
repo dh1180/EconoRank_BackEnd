@@ -10,7 +10,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -18,8 +17,8 @@ class CompanyMarketCapService {
   static final String SOURCE_NAME = "CompaniesMarketCap";
   static final String SOURCE_URL = "https://companiesmarketcap.com/";
   static final String CSV_URL = "https://companiesmarketcap.com/?download=csv";
-  static final int REFRESH_INTERVAL_MINUTES = 5;
-  private static final int MAX_COMPANIES = 500;
+  static final int REFRESH_INTERVAL_MINUTES = 15;
+  private static final int MAX_COMPANIES = 1000;
   private static final int MAX_CSV_BYTES = 15_000_000;
   private static final Logger log = LoggerFactory.getLogger(CompanyMarketCapService.class);
 
@@ -30,7 +29,8 @@ class CompanyMarketCapService {
       BigDecimal marketCap,
       BigDecimal priceUsd,
       String country,
-      String countryCode) {}
+      String countryCode,
+      String exchange) {}
 
   record Snapshot(List<Company> items, Instant updatedAt) {}
 
@@ -99,6 +99,44 @@ class CompanyMarketCapService {
           Map.entry("bermuda", "BMU"),
           Map.entry("cayman islands", "CYM"));
 
+  private static final Map<String, String> EXCHANGE_SUFFIXES =
+      Map.ofEntries(
+          Map.entry("KS", "KRX"),
+          Map.entry("KQ", "KRX"),
+          Map.entry("T", "TSE"),
+          Map.entry("HK", "HKEX"),
+          Map.entry("SS", "SSE"),
+          Map.entry("SZ", "SZSE"),
+          Map.entry("TW", "TWSE"),
+          Map.entry("TWO", "TWSE"),
+          Map.entry("SR", "Tadawul"),
+          Map.entry("L", "LSE"),
+          Map.entry("DE", "XETRA"),
+          Map.entry("F", "XETRA"),
+          Map.entry("PA", "Euronext Paris"),
+          Map.entry("AS", "Euronext Amsterdam"),
+          Map.entry("BR", "Euronext Brussels"),
+          Map.entry("SW", "SIX Swiss"),
+          Map.entry("NS", "NSE India"),
+          Map.entry("BO", "NSE India"),
+          Map.entry("TO", "TSX"),
+          Map.entry("V", "TSX"),
+          Map.entry("AX", "ASX"),
+          Map.entry("SA", "B3"),
+          Map.entry("CO", "Nasdaq Copenhagen"),
+          Map.entry("ST", "Nasdaq Stockholm"),
+          Map.entry("HE", "Nasdaq Helsinki"),
+          Map.entry("OL", "Oslo Børs"),
+          Map.entry("MC", "BME Madrid"),
+          Map.entry("MI", "Borsa Italiana"),
+          Map.entry("SI", "SGX"),
+          Map.entry("JK", "IDX"),
+          Map.entry("BK", "SET"),
+          Map.entry("WA", "GPW Warsaw"),
+          Map.entry("TA", "TASE"),
+          Map.entry("JO", "JSE"),
+          Map.entry("MX", "BMV"));
+
   private final JdbcTemplate db;
   private final boolean refreshEnabled;
   private final AtomicReference<Snapshot> cache = new AtomicReference<>();
@@ -114,18 +152,7 @@ class CompanyMarketCapService {
     this.refreshEnabled = refreshEnabled;
   }
 
-  @Scheduled(
-      initialDelayString = "${statagora.companies.initial-delay-ms:2000}",
-      fixedDelayString = "${statagora.companies.delay-ms:300000}")
-  public synchronized void scheduledRefresh() {
-    if (!refreshEnabled) return;
-    try {
-      refreshNow();
-    } catch (Exception e) {
-      log.warn("Company market cap refresh failed: {}", e.toString());
-    }
-  }
-
+  /** Lazy request-driven 15-minute TTL cache (zero background traffic when idle). */
   public Snapshot current() {
     Snapshot existing = cache.get();
     if (existing != null
@@ -181,6 +208,18 @@ class CompanyMarketCapService {
     return next;
   }
 
+  static String resolveExchange(String symbol) {
+    if (symbol == null || symbol.isBlank()) return "Other";
+    int dot = symbol.lastIndexOf('.');
+    if (dot < 0 || dot == symbol.length() - 1) return "US (NYSE/NASDAQ)";
+    String suffix = symbol.substring(dot + 1).toUpperCase(Locale.ROOT);
+    // Class shares like BRK.B or BF.B are US-listed equities
+    if (suffix.length() == 1 && (suffix.equals("A") || suffix.equals("B") || suffix.equals("C"))) {
+      return "US (NYSE/NASDAQ)";
+    }
+    return EXCHANGE_SUFFIXES.getOrDefault(suffix, "Other");
+  }
+
   private Map<String, String> dbCountryLookup() {
     Map<String, String> map = new HashMap<>(COUNTRY_ALIASES);
     try {
@@ -221,7 +260,16 @@ class CompanyMarketCapService {
       if (marketCap.signum() <= 0) continue;
       rankCounter++;
       String code = countryLookup.getOrDefault(country.toLowerCase(Locale.ROOT), "");
-      result.add(new Company(rankCounter, name, symbol, marketCap, priceUsd, country, code));
+      result.add(
+          new Company(
+              rankCounter,
+              name,
+              symbol,
+              marketCap,
+              priceUsd,
+              country,
+              code,
+              resolveExchange(symbol)));
     }
     return List.copyOf(result);
   }
