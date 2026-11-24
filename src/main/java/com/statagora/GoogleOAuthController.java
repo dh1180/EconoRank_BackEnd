@@ -72,6 +72,25 @@ class GoogleOAuthController {
     return URLEncoder.encode(v, StandardCharsets.UTF_8);
   }
 
+  private String publicOrigin() {
+    try {
+      URI u = URI.create(redirectUri);
+      if (u.getScheme() != null && u.getHost() != null) {
+        return u.getPort() > 0
+            ? u.getScheme() + "://" + u.getHost() + ":" + u.getPort()
+            : u.getScheme() + "://" + u.getHost();
+      }
+    } catch (Exception ignored) {
+    }
+    return "";
+  }
+
+  private void redirectCommunity(HttpServletResponse response, String loc, String query)
+      throws IOException {
+    String path = publicOrigin() + "/" + loc + "/community" + (query == null ? "" : query);
+    response.sendRedirect(path);
+  }
+
   @GetMapping("/providers")
   Map<String, Boolean> providers() {
     return Map.of("google", isConfigured());
@@ -85,7 +104,7 @@ class GoogleOAuthController {
       throws IOException {
     String loc = safeLang(lang);
     if (!isConfigured()) {
-      response.sendRedirect("/" + loc + "/community?authError=google_not_configured");
+      redirectCommunity(response, loc, "?authError=google_not_configured");
       return;
     }
     byte[] bytes = new byte[24];
@@ -137,7 +156,7 @@ class GoogleOAuthController {
         || !MessageDigest.isEqual(
             state.getBytes(StandardCharsets.UTF_8),
             expectedState.getBytes(StandardCharsets.UTF_8))) {
-      response.sendRedirect("/" + loc + "/community?authError=google_failed");
+      redirectCommunity(response, loc, "?authError=google_failed");
       return;
     }
 
@@ -161,12 +180,12 @@ class GoogleOAuthController {
       var tokenRes = http.send(tokenReq, HttpResponse.BodyHandlers.ofString());
       if (tokenRes.statusCode() != 200) {
         log.warn("Google token exchange failed: {}", tokenRes.statusCode());
-        response.sendRedirect("/" + loc + "/community?authError=google_failed");
+        redirectCommunity(response, loc, "?authError=google_failed");
         return;
       }
       String accessToken = json.readTree(tokenRes.body()).path("access_token").asText("");
       if (accessToken.isBlank()) {
-        response.sendRedirect("/" + loc + "/community?authError=google_failed");
+        redirectCommunity(response, loc, "?authError=google_failed");
         return;
       }
 
@@ -179,7 +198,7 @@ class GoogleOAuthController {
       var userRes = http.send(userReq, HttpResponse.BodyHandlers.ofString());
       if (userRes.statusCode() != 200) {
         log.warn("Google userinfo failed: {}", userRes.statusCode());
-        response.sendRedirect("/" + loc + "/community?authError=google_failed");
+        redirectCommunity(response, loc, "?authError=google_failed");
         return;
       }
       var profile = json.readTree(userRes.body());
@@ -187,7 +206,7 @@ class GoogleOAuthController {
       String email = profile.path("email").asText("").trim().toLowerCase(Locale.ROOT);
       String rawName = profile.path("name").asText("").trim();
       if (sub.isEmpty() || email.isEmpty()) {
-        response.sendRedirect("/" + loc + "/community?authError=google_failed");
+        redirectCommunity(response, loc, "?authError=google_failed");
         return;
       }
 
@@ -225,10 +244,10 @@ class GoogleOAuthController {
       }
 
       auth.signIn(id, role, request, response);
-      response.sendRedirect("/" + loc + "/community");
+      redirectCommunity(response, loc, null);
     } catch (Exception e) {
       log.warn("Google OAuth callback error: {}", e.toString());
-      response.sendRedirect("/" + loc + "/community?authError=google_failed");
+      redirectCommunity(response, loc, "?authError=google_failed");
     }
   }
 }
