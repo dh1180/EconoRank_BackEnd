@@ -106,6 +106,7 @@ class CommunityController {
       @RequestParam(defaultValue = "global") String space,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size,
+      @RequestParam(defaultValue = "latest") String sort,
       Principal principal) {
     EconomyController.pagination(page, size);
     String viewer = viewer(principal);
@@ -114,6 +115,10 @@ class CommunityController {
         " FROM post p LEFT JOIN member m ON m.id=p.author_id WHERE p.space_id=? AND"
             + " p.status='VISIBLE' AND (p.author_id IS NULL OR NOT EXISTS (SELECT 1 FROM"
             + " member_block b WHERE b.blocker_id=? AND b.blocked_id=p.author_id))";
+    String orderBy =
+        "popular".equalsIgnoreCase(sort)
+            ? " ORDER BY (SELECT COUNT(*) FROM post_like l WHERE l.post_id=p.id) DESC, p.created_at DESC, p.id"
+            : " ORDER BY p.created_at DESC, p.id";
     var items =
         db.queryForList(
             "SELECT p.id,p.space_id AS \"spaceId\",p.title,p.body,p.language,p.author_id AS"
@@ -121,11 +126,13 @@ class CommunityController {
                 + " \"author\",COALESCE(m.country_code,p.guest_country) AS"
                 + " \"authorCountry\",CASE WHEN p.author_id IS NULL THEN TRUE ELSE FALSE END AS"
                 + " \"anonymous\",p.created_at AS \"createdAt\",(SELECT COUNT(*) FROM post_like l"
-                + " WHERE l.post_id=p.id) AS \"likeCount\",CASE WHEN EXISTS(SELECT 1 FROM"
-                + " post_like l WHERE l.post_id=p.id AND l.member_id=?) THEN TRUE ELSE FALSE END"
-                + " AS \"liked\""
+                + " WHERE l.post_id=p.id) AS \"likeCount\",(SELECT COUNT(*) FROM comment c WHERE"
+                + " c.post_id=p.id AND c.status='VISIBLE') AS \"commentCount\",CASE WHEN"
+                + " EXISTS(SELECT 1 FROM post_like l WHERE l.post_id=p.id AND l.member_id=?)"
+                + " THEN TRUE ELSE FALSE END AS \"liked\""
                 + condition
-                + " ORDER BY p.created_at DESC,p.id LIMIT ? OFFSET ?",
+                + orderBy
+                + " LIMIT ? OFFSET ?",
             viewer,
             targetSpace,
             viewer,
