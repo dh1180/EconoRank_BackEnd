@@ -120,9 +120,13 @@ class CommunityController {
                 + " \"authorId\",COALESCE(m.display_name,p.guest_name) AS"
                 + " \"author\",COALESCE(m.country_code,p.guest_country) AS"
                 + " \"authorCountry\",CASE WHEN p.author_id IS NULL THEN TRUE ELSE FALSE END AS"
-                + " \"anonymous\",p.created_at AS \"createdAt\""
+                + " \"anonymous\",p.created_at AS \"createdAt\",(SELECT COUNT(*) FROM post_like l"
+                + " WHERE l.post_id=p.id) AS \"likeCount\",CASE WHEN EXISTS(SELECT 1 FROM"
+                + " post_like l WHERE l.post_id=p.id AND l.member_id=?) THEN TRUE ELSE FALSE END"
+                + " AS \"liked\""
                 + condition
                 + " ORDER BY p.created_at DESC,p.id LIMIT ? OFFSET ?",
+            viewer,
             targetSpace,
             viewer,
             size,
@@ -462,16 +466,103 @@ ORDER BY r.created_at DESC LIMIT 50 OFFSET ?
     }
   }
 
+  @PostMapping("/posts/{id}/like")
+  @Transactional
+  Map<String, Object> toggleLike(@PathVariable String id, Principal principal) {
+    if (principal == null) {
+      throw new ApiErrors.Failure(
+          org.springframework.http.HttpStatus.UNAUTHORIZED, "Sign in required");
+    }
+    String memberId = principal.getName();
+    visiblePost(id, memberId);
+    limits.check("like:" + memberId, 60, 60);
+    int deleted =
+        db.update("DELETE FROM post_like WHERE post_id=? AND member_id=?", id, memberId);
+    boolean liked;
+    if (deleted > 0) {
+      liked = false;
+    } else {
+      db.update("INSERT INTO post_like(post_id,member_id) VALUES (?,?)", id, memberId);
+      liked = true;
+    }
+    int count =
+        db.queryForObject(
+            "SELECT COUNT(*) FROM post_like WHERE post_id=?", Integer.class, id);
+    return Map.of("liked", liked, "likeCount", count);
+  }
+
+  @GetMapping("/me/posts")
+  List<Map<String, Object>> myPosts(Principal principal) {
+    if (principal == null) {
+      throw new ApiErrors.Failure(
+          org.springframework.http.HttpStatus.UNAUTHORIZED, "Sign in required");
+    }
+    String memberId = principal.getName();
+    return db.queryForList(
+        """
+        SELECT p.id,p.title,p.body,p.language,p.created_at AS "createdAt",
+        (SELECT COUNT(*) FROM post_like l WHERE l.post_id=p.id) AS "likeCount",
+        (SELECT COUNT(*) FROM comment c WHERE c.post_id=p.id AND c.status='VISIBLE') AS "commentCount"
+        FROM post p WHERE p.author_id=? AND p.status='VISIBLE'
+        ORDER BY p.created_at DESC LIMIT 100
+        """,
+        memberId);
+  }
+
+  @GetMapping("/me/comments")
+  List<Map<String, Object>> myComments(Principal principal) {
+    if (principal == null) {
+      throw new ApiErrors.Failure(
+          org.springframework.http.HttpStatus.UNAUTHORIZED, "Sign in required");
+    }
+    String memberId = principal.getName();
+    return db.queryForList(
+        """
+        SELECT c.id,c.post_id AS "postId",p.title AS "postTitle",c.body,c.created_at AS "createdAt"
+        FROM comment c JOIN post p ON p.id=c.post_id
+        WHERE c.author_id=? AND c.status='VISIBLE' AND p.status='VISIBLE'
+        ORDER BY c.created_at DESC LIMIT 100
+        """,
+        memberId);
+  }
+
+  @GetMapping("/me/likes")
+  List<Map<String, Object>> myLikes(Principal principal) {
+    if (principal == null) {
+      throw new ApiErrors.Failure(
+          org.springframework.http.HttpStatus.UNAUTHORIZED, "Sign in required");
+    }
+    String memberId = principal.getName();
+    return db.queryForList(
+        """
+        SELECT p.id,p.title,p.body,p.language,
+        COALESCE(m.display_name,p.guest_name) AS author,
+        COALESCE(m.country_code,p.guest_country) AS "authorCountry",
+        p.created_at AS "createdAt",
+        (SELECT COUNT(*) FROM post_like l2 WHERE l2.post_id=p.id) AS "likeCount",
+        l.created_at AS "likedAt"
+        FROM post_like l
+        JOIN post p ON p.id=l.post_id
+        LEFT JOIN member m ON m.id=p.author_id
+        WHERE l.member_id=? AND p.status='VISIBLE'
+        ORDER BY l.created_at DESC LIMIT 100
+        """,
+        memberId);
+  }
+
   private Map<String, Object> visiblePost(String id, String viewer) {
     var rows =
         db.queryForList(
             """
 SELECT p.id,p.title,p.body,p.language,p.space_id AS "spaceId",p.author_id AS "authorId",
 COALESCE(m.display_name,p.guest_name) AS author,COALESCE(m.country_code,p.guest_country) AS "authorCountry",
-CASE WHEN p.author_id IS NULL THEN TRUE ELSE FALSE END AS "anonymous",p.created_at AS "createdAt"
+CASE WHEN p.author_id IS NULL THEN TRUE ELSE FALSE END AS "anonymous",p.created_at AS "createdAt",
+(SELECT COUNT(*) FROM post_like l WHERE l.post_id=p.id) AS "likeCount",
+CASE WHEN EXISTS(SELECT 1 FROM post_like l WHERE l.post_id=p.id AND l.member_id=?) THEN TRUE ELSE FALSE END AS "liked"
 FROM post p LEFT JOIN member m ON m.id=p.author_id WHERE p.id=? AND p.status='VISIBLE'
 AND (p.author_id IS NULL OR NOT EXISTS (SELECT 1 FROM member_block b WHERE b.blocker_id=? AND b.blocked_id=p.author_id))
 """,
+            viewer,
             id,
             viewer);
     if (rows.isEmpty()) throw ApiErrors.missing();

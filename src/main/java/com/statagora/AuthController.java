@@ -115,11 +115,24 @@ class AuthController {
         id);
   }
 
+  record UpdateProfile(@NotBlank @Size(max = 40) String displayName) {}
+
   @GetMapping("/me")
   Map<String, Object> me(Principal principal) {
     if (principal == null)
       throw new ApiErrors.Failure(
           org.springframework.http.HttpStatus.UNAUTHORIZED, "Sign in required");
+    return member(principal.getName());
+  }
+
+  @PatchMapping("/me")
+  Map<String, Object> updateMe(@Valid @RequestBody UpdateProfile body, Principal principal) {
+    if (principal == null)
+      throw new ApiErrors.Failure(
+          org.springframework.http.HttpStatus.UNAUTHORIZED, "Sign in required");
+    String nextName = body.displayName().strip();
+    if (nextName.isEmpty()) throw ApiErrors.bad("Display name is required");
+    db.update("UPDATE member SET display_name=? WHERE id=?", nextName, principal.getName());
     return member(principal.getName());
   }
 
