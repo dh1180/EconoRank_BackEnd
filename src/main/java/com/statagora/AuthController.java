@@ -23,6 +23,7 @@ class AuthController {
   private final HttpSessionCsrfTokenRepository csrf;
   private final RequestLimits limits;
   private final GeoCountryService geo;
+  private final AdminRegistry admins;
   private final String dummyHash;
 
   AuthController(
@@ -31,13 +32,15 @@ class AuthController {
       HttpSessionSecurityContextRepository contexts,
       HttpSessionCsrfTokenRepository csrf,
       RequestLimits limits,
-      GeoCountryService geo) {
+      GeoCountryService geo,
+      AdminRegistry admins) {
     this.db = db;
     this.encoder = encoder;
     this.contexts = contexts;
     this.csrf = csrf;
     this.limits = limits;
     this.geo = geo;
+    this.admins = admins;
     dummyHash = encoder.encode("timing-equalization-only");
   }
 
@@ -91,7 +94,13 @@ class AuthController {
           org.springframework.http.HttpStatus.UNAUTHORIZED, "Invalid email or password");
     var row = rows.get(0);
     String id = (String) row.get("id");
-    signIn(id, (String) row.get("role"), request, response);
+    String email = (String) row.get("email");
+    String role = (String) row.get("role");
+    if (admins.isConfiguredAdmin(email) && !"ADMIN".equals(role)) {
+      db.update("UPDATE member SET role='ADMIN' WHERE id=?", id);
+      role = "ADMIN";
+    }
+    signIn(id, role, request, response);
     return member(id);
   }
 

@@ -21,6 +21,8 @@ server:
     include-message: never
     include-stacktrace: never
 statagora:
+  admin:
+    emails: ${ADMIN_EMAILS:mjdh1936@gmail.com}
   translation:
     provider: ${TRANSLATION_PROVIDER:auto}
     url: ${TRANSLATION_URL:}

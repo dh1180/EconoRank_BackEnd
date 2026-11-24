@@ -405,4 +405,77 @@ class ApiIntegrationTest {
         .andExpect(status().isOk());
     api.perform(get("/api/posts/" + id)).andExpect(status().isNotFound());
   }
+
+  @Test
+  void configuredAdminEmailGetsAdminAccessAndModerationControls() throws Exception {
+    var regular = register();
+    String postId = createPost(regular);
+    api.perform(get("/api/admin/overview").session(regular.session))
+        .andExpect(status().isForbidden());
+
+    // Register configured root admin email (mjdh1936@gmail.com) and sign in to trigger promotion
+    api.perform(
+            post("/api/auth/register")
+                .with(csrf())
+                .with(
+                    req -> {
+                      req.setRemoteAddr("admin-reg-test");
+                      return req;
+                    })
+                .contentType("application/json")
+                .content(
+                    payload(
+                        Map.of(
+                            "email",
+                            "mjdh1936@gmail.com",
+                            "password",
+                            "admin-pass-1234",
+                            "displayName",
+                            "EconoAdmin"))))
+        .andExpect(status().isCreated());
+    var adminLogin =
+        api.perform(
+                post("/api/auth/login")
+                    .with(csrf())
+                    .with(
+                        req -> {
+                          req.setRemoteAddr("admin-login-test");
+                          return req;
+                        })
+                    .contentType("application/json")
+                    .content(
+                        payload(
+                            Map.of(
+                                "email", "mjdh1936@gmail.com", "password", "admin-pass-1234"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.role").value("ADMIN"))
+            .andReturn();
+    MockHttpSession adminSession = (MockHttpSession) adminLogin.getRequest().getSession();
+
+    api.perform(get("/api/admin/overview").session(adminSession))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.adminsTotal").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
+        .andExpect(jsonPath("$.translationProvider").isString());
+    api.perform(get("/api/admin/members").session(adminSession))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items").isArray());
+    api.perform(
+            patch("/api/admin/posts/" + postId + "/status")
+                .session(adminSession)
+                .with(csrf())
+                .contentType("application/json")
+                .content("{\"status\":\"HIDDEN\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("HIDDEN"));
+    api.perform(get("/api/posts/" + postId)).andExpect(status().isNotFound());
+    api.perform(
+            patch("/api/admin/posts/" + postId + "/status")
+                .session(adminSession)
+                .with(csrf())
+                .contentType("application/json")
+                .content("{\"status\":\"VISIBLE\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("VISIBLE"));
+    api.perform(get("/api/posts/" + postId)).andExpect(status().isOk());
+  }
 }

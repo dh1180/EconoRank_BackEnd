@@ -28,6 +28,7 @@ class GoogleOAuthController {
   private final JdbcTemplate db;
   private final AuthController auth;
   private final GeoCountryService geo;
+  private final AdminRegistry admins;
   private final PasswordEncoder encoder;
   private final ObjectMapper json;
   private final String clientId;
@@ -43,6 +44,7 @@ class GoogleOAuthController {
       JdbcTemplate db,
       AuthController auth,
       GeoCountryService geo,
+      AdminRegistry admins,
       PasswordEncoder encoder,
       ObjectMapper json,
       @Value("${statagora.oauth.google.client-id:}") String clientId,
@@ -52,6 +54,7 @@ class GoogleOAuthController {
     this.db = db;
     this.auth = auth;
     this.geo = geo;
+    this.admins = admins;
     this.encoder = encoder;
     this.json = json;
     this.clientId = clientId == null ? "" : clientId.trim();
@@ -227,18 +230,23 @@ class GoogleOAuthController {
         if (row.get("google_sub") == null) {
           db.update("UPDATE member SET google_sub=? WHERE id=?", sub, id);
         }
+        if (admins.isConfiguredAdmin(email) && !"ADMIN".equals(role)) {
+          db.update("UPDATE member SET role='ADMIN' WHERE id=?", id);
+          role = "ADMIN";
+        }
       } else {
         id = UUID.randomUUID().toString();
-        role = "USER";
+        role = admins.isConfiguredAdmin(email) ? "ADMIN" : "USER";
         String countryCode = geo.detectCountryIso3(request);
         String randomPassword = UUID.randomUUID().toString() + UUID.randomUUID();
         db.update(
-            "INSERT INTO member(id,email,display_name,password_hash,country_code,google_sub)"
-                + " VALUES (?,?,?,?,?,?)",
+            "INSERT INTO member(id,email,display_name,password_hash,role,country_code,google_sub)"
+                + " VALUES (?,?,?,?,?,?,?)",
             id,
             email,
             displayName,
             encoder.encode(randomPassword),
+            role,
             countryCode,
             sub);
       }
