@@ -11,6 +11,7 @@ import org.slf4j.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 
 @Service
 class CompanyMarketCapService {
@@ -294,11 +295,11 @@ class CompanyMarketCapService {
       if (line.isEmpty()) continue;
       List<String> cols = parseCsvLine(line);
       if (cols.size() < 6) continue;
-      String name = cols.get(1).trim();
+      String name = HtmlUtils.htmlUnescape(cols.get(1).trim());
       String symbol = cols.get(2).trim();
       String capText = cols.get(3).trim();
       String priceText = cols.get(4).trim();
-      String country = cols.get(5).trim();
+      String country = HtmlUtils.htmlUnescape(cols.get(5).trim());
       if (name.isEmpty() || capText.isEmpty()) continue;
       BigDecimal marketCap;
       BigDecimal priceUsd;

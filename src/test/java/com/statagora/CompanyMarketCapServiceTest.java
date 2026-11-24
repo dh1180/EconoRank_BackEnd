@@ -14,12 +14,14 @@ class CompanyMarketCapServiceTest {
         "1","Apple","AAPL","4978144444416","342.56","United States"
         "2","Alphabet, Inc. (Google)","GOOG","3245615874048","264","United States"
         "3","Samsung Electronics","005930.KS","420000000000","62.10","South Korea"
-        "4","Invalid Zero","ZERO","0","1.00","Japan"
+        "4","KT&amp;G (Korea Tobacco)","033780.KS","12000000000","80.00","South Korea"
+        "5","Invalid Zero","ZERO","0","1.00","Japan"
         """;
     var items =
         CompanyMarketCapService.parseCsv(
             csv, Map.of("united states", "USA", "south korea", "KOR", "japan", "JPN"));
-    assertThat(items).hasSize(3);
+    assertThat(items).hasSize(4);
+    assertThat(items.get(3).name()).isEqualTo("KT&G (Korea Tobacco)");
     assertThat(items.get(0).rank()).isEqualTo(1);
     assertThat(items.get(0).symbol()).isEqualTo("AAPL");
     assertThat(items.get(0).countryCode()).isEqualTo("USA");
