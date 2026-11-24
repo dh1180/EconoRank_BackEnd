@@ -95,7 +95,7 @@ class AuthController {
     return member(id);
   }
 
-  private void signIn(
+  void signIn(
       String id, String role, HttpServletRequest request, HttpServletResponse response) {
     request.getSession(true);
     request.changeSessionId();

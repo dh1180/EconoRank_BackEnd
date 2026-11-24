@@ -25,3 +25,8 @@ statagora:
     url: ${TRANSLATION_URL:http://127.0.0.1:5000}
     api-key: ${TRANSLATION_API_KEY:}
     enabled: ${TRANSLATION_ENABLED:true}
+  oauth:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:https://econorank.com/api/auth/google/callback}
