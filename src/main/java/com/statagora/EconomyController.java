@@ -142,6 +142,21 @@ JOIN dataset_release d ON d.id=o.release_id
         "countries", codes, "year", selected, "items", observations(codes, selected, source));
   }
 
+  @GetMapping("/compare/series")
+  Map<String, Object> compareSeries(
+      @RequestParam String countries,
+      @RequestParam(defaultValue = "auto") String source) {
+    var codes = Arrays.stream(countries.split(",", -1)).distinct().toList();
+    if (codes.size() < 2
+        || codes.size() > 5
+        || codes.stream().anyMatch(c -> !c.matches("[A-Z]{3}")))
+      throw ApiErrors.bad("Choose 2 to 5 ISO3 country codes");
+    for (String code : codes)
+      if (db.queryForObject("SELECT COUNT(*) FROM country WHERE code=?", Integer.class, code) == 0)
+        throw ApiErrors.missing();
+    return Map.of("countries", codes, "items", observations(codes, null, source));
+  }
+
   @GetMapping("/data/status")
   Map<String, Object> status() {
     return Map.of(

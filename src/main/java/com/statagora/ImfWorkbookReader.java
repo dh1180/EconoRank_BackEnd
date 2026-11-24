@@ -94,8 +94,8 @@ class ImfWorkbookReader {
                 int actual = actualMatch.find() ? Integer.parseInt(actualMatch.group()) : 0;
                 publications.add(cell(row, header, "PUBLICATION_DATE"));
                 for (var entry : header.entrySet())
-                  if (entry.getKey().matches("20[2-9][0-9]")
-                      && Integer.parseInt(entry.getKey()) >= 2022) {
+                  if (entry.getKey().matches("(?:19|20)\\d{2}")
+                      && Integer.parseInt(entry.getKey()) >= 1980) {
                     String text = row.getOrDefault(entry.getValue(), "");
                     if (text.isBlank() || text.equals("n/a") || text.equals("--")) continue;
                     BigDecimal amount;

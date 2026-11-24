@@ -88,7 +88,7 @@ class EconomicSnapshotStore {
       if (coverage < 100)
         throw new IllegalArgumentException("Insufficient country coverage for " + metric);
     }
-    String id = snapshot.provider() + "-" + snapshot.checksum().substring(0, 32) + "-v3";
+    String id = snapshot.provider() + "-" + snapshot.checksum().substring(0, 32) + "-v4";
     if (db.queryForObject("SELECT COUNT(*) FROM dataset_release WHERE id=?", Integer.class, id) > 0)
       return false;
     // A failed download/validation never reaches this transaction; all source rows publish
