@@ -47,7 +47,7 @@ class GoogleOAuthController {
       ObjectMapper json,
       @Value("${statagora.oauth.google.client-id:}") String clientId,
       @Value("${statagora.oauth.google.client-secret:}") String clientSecret,
-      @Value("${statagora.oauth.google.redirect-uri:https://econorank.com/api/auth/google/callback}")
+      @Value("${statagora.oauth.google.redirect-uri:https://econorank.com/login/oauth2/code/google}")
           String redirectUri) {
     this.db = db;
     this.auth = auth;
