@@ -82,4 +82,32 @@ class TranslationServiceTest {
       server.stop(0);
     }
   }
+
+  @Test
+  void resolvesProviderPriorityAndLanguageCodes() {
+    ObjectMapper json = new ObjectMapper();
+    assertEquals(
+        "google-gtx",
+        new TranslationService(null, json, "auto", "", "", "", "", "gemini-2.5-flash", true)
+            .resolveProvider());
+    assertEquals(
+        "libretranslate",
+        new TranslationService(
+                null, json, "auto", "http://localhost:5000", "", "", "", "gemini-2.5-flash", true)
+            .resolveProvider());
+    assertEquals(
+        "deepl",
+        new TranslationService(null, json, "auto", "", "", "key:fx", "", "gemini-2.5-flash", true)
+            .resolveProvider());
+    assertEquals(
+        "gemini",
+        new TranslationService(
+                null, json, "auto", "", "", "key:fx", "gem-key", "gemini-2.5-flash", true)
+            .resolveProvider());
+
+    assertEquals("zh-CN", TranslationService.googleTargetLang("zh"));
+    assertEquals("zh-TW", TranslationService.googleTargetLang("zh-tw"));
+    assertEquals("EN-US", TranslationService.deeplTargetLang("en"));
+    assertEquals("ZH-HANS", TranslationService.deeplTargetLang("zh"));
+  }
 }

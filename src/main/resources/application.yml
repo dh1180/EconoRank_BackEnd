@@ -22,8 +22,12 @@ server:
     include-stacktrace: never
 statagora:
   translation:
-    url: ${TRANSLATION_URL:http://127.0.0.1:5000}
+    provider: ${TRANSLATION_PROVIDER:auto}
+    url: ${TRANSLATION_URL:}
     api-key: ${TRANSLATION_API_KEY:}
+    deepl-api-key: ${DEEPL_API_KEY:}
+    gemini-api-key: ${GEMINI_API_KEY:}
+    gemini-model: ${GEMINI_MODEL:gemini-2.5-flash}
     enabled: ${TRANSLATION_ENABLED:true}
   oauth:
     google:
